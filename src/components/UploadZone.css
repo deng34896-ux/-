@@ -7,13 +7,14 @@
   transition: all var(--transition);
   background: var(--color-surface);
 }
-.upload-zone:hover { border-color: var(--color-accent); background: rgb(45 74 62 / 0.03); }
-.upload-zone.has-file { border-style: solid; border-color: var(--color-accent); background: rgb(45 74 62 / 0.04); }
+.upload-zone:hover { border-color: var(--color-accent); background: rgb(30 58 95 / 0.03); }
+.upload-zone.has-file { border-style: solid; border-color: var(--color-accent); background: rgb(30 58 95 / 0.04); }
 .upload-state { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--color-text-secondary); }
 .upload-state p { font-size: 15px; font-weight: 500; color: var(--color-text); }
 .upload-state.uploaded p { font-size: 13px; }
 .upload-state svg { color: var(--color-accent); opacity: 0.7; }
 .upload-state.uploaded svg { color: var(--color-success); opacity: 1; }
-.upload-hint { font-size: 12px; color: var(--color-text-secondary); }
+.upload-hint { font-size: 12px; color: var(--color-text-secondary); display: flex; align-items: center; gap: 6px; }
 .spinner { width: 24px; height: 24px; border: 2.5px solid var(--color-border); border-top-color: var(--color-accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.spinner-mini { width: 12px; height: 12px; border: 2px solid var(--color-border); border-top-color: var(--color-accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

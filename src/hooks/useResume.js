@@ -1,83 +1,77 @@
 import { useState, useCallback } from 'react';
 
-function getStoredKey() {
-  try { return localStorage.getItem('resume_tailor_api_key') || ''; }
-  catch (e) { return ''; }
-}
-function setStoredKey(key) {
-  try { localStorage.setItem('resume_tailor_api_key', key); }
-  catch (e) {}
-}
-function getStoredProvider() {
-  try { return localStorage.getItem('resume_tailor_provider') || 'deepseek'; }
-  catch (e) { return 'deepseek'; }
-}
-function setStoredProvider(pid) {
-  try { localStorage.setItem('resume_tailor_provider', pid); }
-  catch (e) {}
-}
+function getStoredKey() { try { return localStorage.getItem('resume_tailor_api_key') || ''; } catch (e) { return ''; } }
+function setStoredKey(key) { try { localStorage.setItem('resume_tailor_api_key', key); } catch (e) {} }
+function getStoredProvider() { try { return localStorage.getItem('resume_tailor_provider') || 'deepseek'; } catch (e) { return 'deepseek'; } }
+function setStoredProvider(pid) { try { localStorage.setItem('resume_tailor_provider', pid); } catch (e) {} }
 
 const SYSTEM_PROMPT = `你是一位资深职业顾问和简历修改专家。
 
-分析简历原文和目标岗位描述，给出结构化修改建议。
+你的任务：根据原始简历和目标岗位描述，给出结构化修改建议。
 
 核心原则：
-- 不编造工作经历、项目或技能，只基于已有的真实信息
-- 调整措辞、强调符合岗位的经验、使用岗位关键词
+- 不编造工作经历、项目或技能——只基于简历中已有的真实信息
+- 可以调整措辞、强调符合岗位的经验、使用岗位关键词
 - 调整叙述角度让经历更贴合目标岗位
 - 诚实性优先于吸引力
 
-返回纯 JSON（不要 markdown 包裹），结构如下：
+返回纯 JSON（不要用 markdown 包裹）：
 {
   "summary": "重写后的职业概要",
   "experiences": [
-    {
-      "company": "公司名（保持原样）",
-      "title": "职位（保持原样）",
-      "dates": "时间（保持原样）",
-      "highlights": ["重写后的亮点1", "重写后的亮点2"],
-      "changes_summary": "简短的修改说明"
-    }
+    { "company": "公司名", "title": "职位", "dates": "时间", "highlights": ["亮点1", "亮点2"], "changes_summary": "修改说明" }
   ],
-  "skills": ["重新整理后的技能列表"],
+  "skills": ["技能列表"],
   "skills_changes": "技能修改说明",
-  "overall_suggestions": "整体建议（1-3条）"
+  "overall_suggestions": "整体建议"
 }`;
 
-const USER_MSG = (resumeText, jobDescription) => `原始简历：\n---\n${resumeText}\n---\n\n目标岗位描述：\n---\n${jobDescription}\n---\n\n请提出修改建议。`;
+const PARSE_PROMPT = `你是一位简历解析专家。将以下简历原始文本解析为结构化数据。
 
-async function callAI(provider, resumeText, jobDescription, apiKey) {
+规则：
+- personal_info: 从简历中提取姓名、邮箱、电话、地址
+- summary: 如果有职业概要/个人简介，提取出来；否则用一句话概括
+- experiences: 每条工作经历包含 company、title、dates、highlights（工作亮点列表）
+- education: 每条教育经历包含 school、degree、major、dates
+- skills: 列出所有技能
+
+返回纯 JSON（不要用 markdown 包裹）：
+{
+  "personal_info": { "name": "姓名", "email": "邮箱", "phone": "电话", "location": "地址" },
+  "summary": "职业概要",
+  "experiences": [ { "company": "", "title": "", "dates": "", "highlights": [""] } ],
+  "education": [ { "school": "", "degree": "", "major": "", "dates": "" } ],
+  "skills": [""]
+}`;
+
+const USER_MSG = (resumeText, jobDescription, resumeData) =>
+  `**原始简历（结构化数据）：**\n${JSON.stringify(resumeData, null, 2)}\n\n**原始简历原文：**\n---\n${resumeText}\n---\n\n**目标岗位描述：**\n---\n${jobDescription}\n---\n\n请根据以上岗位要求提出修改建议。`;
+
+async function callAI(provider, messages, apiKey, systemPrompt) {
+  let resp, data;
   if (provider === 'anthropic') {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 4096, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: USER_MSG(resumeText, jobDescription) }] }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 4096, system: systemPrompt, messages: [{ role: 'user', content: messages.map(m => m.content).join('\n\n') }] }),
     });
-    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `Anthropic 错误 ${resp.status}`); }
-    return JSON.parse((await resp.json()).content[0].text.trim());
-  }
-
-  if (provider === 'deepseek') {
-    const resp = await fetch('https://api.deepseek.com/chat/completions', {
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `错误 ${resp.status}`); }
+    data = await resp.json();
+    const raw = data.content[0].text.trim();
+    return JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim());
+  } else {
+    const url = provider === 'deepseek' ? 'https://api.deepseek.com/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+    const model = provider === 'deepseek' ? 'deepseek-chat' : 'gpt-4o';
+    resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 4096, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: USER_MSG(resumeText, jobDescription) }] }),
+      body: JSON.stringify({ model, max_tokens: 4096, messages: [{ role: 'system', content: systemPrompt }, ...messages] }),
     });
-    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `DeepSeek 错误 ${resp.status}`); }
-    return JSON.parse((await resp.json()).choices[0].message.content.trim());
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `错误 ${resp.status}`); }
+    data = await resp.json();
+    const raw = data.choices[0].message.content.trim();
+    return JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim());
   }
-
-  if (provider === 'openai') {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 4096, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: USER_MSG(resumeText, jobDescription) }] }),
-    });
-    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `OpenAI 错误 ${resp.status}`); }
-    return JSON.parse((await resp.json()).choices[0].message.content.trim());
-  }
-
-  throw new Error('不支持的 AI 提供商');
 }
 
 export function useResume() {
@@ -92,6 +86,7 @@ export function useResume() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [parsing, setParsing] = useState(false);
 
   const saveApiKey = useCallback((key) => { setApiKey(key); setStoredKey(key); }, []);
   const saveProvider = useCallback((pid) => { setProvider(pid); setStoredProvider(pid); }, []);
@@ -113,19 +108,33 @@ export function useResume() {
       } else throw new Error(`不支持 .${ext}，请上传 .docx 或 .pdf`);
       if (!text.trim()) throw new Error('未能从文件中提取到文本');
       setResumeFile(file); setResumeText(text);
-      setResumeData({ personal_info: {}, summary: text, experiences: [], education: [], skills: [] });
       setSuggestions(null); setMergedData(null);
+
+      // Auto-parse if API key is set
+      const k = apiKey || getStoredKey();
+      const p = provider || getStoredProvider();
+      if (k) {
+        setParsing(true);
+        try {
+          const structured = await callAI(p, [{ role: 'user', content: '简历原文：\n---\n' + text + '\n---\n\n请解析为结构化数据。' }], k, PARSE_PROMPT);
+          setResumeData({ personal_info: structured.personal_info || {}, summary: structured.summary || '', experiences: structured.experiences || [], education: structured.education || [], skills: structured.skills || [] });
+        } catch (parseErr) {
+          setResumeData({ personal_info: {}, summary: text, experiences: [], education: [], skills: [] });
+        } finally { setParsing(false); }
+      } else {
+        setResumeData({ personal_info: {}, summary: text, experiences: [], education: [], skills: [] });
+      }
       return { text };
     } catch (e) { setError(e.message); throw e; }
     finally { setUploading(false); }
-  }, []);
+  }, [apiKey, provider]);
 
   const tailorResume = useCallback(async () => {
     if (!resumeText || !jobDescription || !apiKey) return;
     setLoading(true); setError('');
     try {
       saveApiKey(apiKey); saveProvider(provider);
-      const s = await callAI(provider, resumeText, jobDescription, apiKey);
+      const s = await callAI(provider, [{ role: 'user', content: USER_MSG(resumeText, jobDescription, resumeData) }], apiKey, SYSTEM_PROMPT);
       setSuggestions(s); setMergedData(merge(resumeData, s));
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -171,7 +180,7 @@ export function useResume() {
 
   return {
     resumeFile, resumeText, resumeData, jobDescription, apiKey, provider,
-    suggestions, mergedData, loading, error, uploading,
+    suggestions, mergedData, loading, error, uploading, parsing,
     setJobDescription, saveApiKey, saveProvider, uploadResume, tailorResume,
     acceptSuggestion, rejectSuggestion, reset, exportResume,
   };

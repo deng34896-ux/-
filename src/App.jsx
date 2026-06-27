@@ -10,7 +10,7 @@ import './App.css';
 function App() {
   const {
     resumeFile, resumeText, resumeData, jobDescription, apiKey, provider,
-    suggestions, mergedData, loading, error, uploading,
+    suggestions, mergedData, loading, error, uploading, parsing,
     setJobDescription, saveApiKey, saveProvider, uploadResume, tailorResume,
     acceptSuggestion, rejectSuggestion, reset, exportResume,
   } = useResume();
@@ -173,7 +173,7 @@ function App() {
           ) : (
             <div className="tool-workspace">
               <aside className="app-sidebar">
-                <UploadZone onUpload={uploadResume} uploading={uploading} hasFile={!!resumeFile} fileName={resumeFile?.name} />
+                <UploadZone onUpload={uploadResume} uploading={uploading} parsing={parsing} hasFile={!!resumeFile} fileName={resumeFile?.name} />
                 {hasResume && (
                   <>
                     <JobInput value={jobDescription} onChange={setJobDescription} disabled={loading} />
