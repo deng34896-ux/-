@@ -1,25 +1,30 @@
 import { useState, useCallback } from 'react';
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-4-20250514';
-
 function getStoredKey() {
   try { return localStorage.getItem('resume_tailor_api_key') || ''; }
   catch (e) { return ''; }
 }
 function setStoredKey(key) {
   try { localStorage.setItem('resume_tailor_api_key', key); }
-  catch (e) { /* ignore */ }
+  catch (e) {}
+}
+function getStoredProvider() {
+  try { return localStorage.getItem('resume_tailor_provider') || 'deepseek'; }
+  catch (e) { return 'deepseek'; }
+}
+function setStoredProvider(pid) {
+  try { localStorage.setItem('resume_tailor_provider', pid); }
+  catch (e) {}
 }
 
 const SYSTEM_PROMPT = `你是一位资深职业顾问和简历修改专家。
 
-你的任务：分析简历原文和目标岗位描述，给出结构化修改建议。
+分析简历原文和目标岗位描述，给出结构化修改建议。
 
 核心原则：
-- 不编造任何工作经历、项目或技能——只基于简历中已有的真实信息
-- 可以调整措辞、强调符合岗位的经验、使用岗位关键词
-- 可以调整叙述角度让经历更贴合目标岗位
+- 不编造工作经历、项目或技能，只基于已有的真实信息
+- 调整措辞、强调符合岗位的经验、使用岗位关键词
+- 调整叙述角度让经历更贴合目标岗位
 - 诚实性优先于吸引力
 
 返回纯 JSON（不要 markdown 包裹），结构如下：
@@ -35,36 +40,44 @@ const SYSTEM_PROMPT = `你是一位资深职业顾问和简历修改专家。
     }
   ],
   "skills": ["重新整理后的技能列表"],
-  "skills_changes": "技能部分的修改说明",
+  "skills_changes": "技能修改说明",
   "overall_suggestions": "整体建议（1-3条）"
 }`;
 
-async function callClaude(resumeText, jobDescription, apiKey) {
-  const resp = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{
-        role: 'user',
-        content: `原始简历：\n---\n${resumeText}\n---\n\n目标岗位描述：\n---\n${jobDescription}\n---\n\n请根据以上岗位要求提出修改建议。`,
-      }],
-    }),
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error?.message || `API 请求失败 (${resp.status})`);
+const USER_MSG = (resumeText, jobDescription) => `原始简历：\n---\n${resumeText}\n---\n\n目标岗位描述：\n---\n${jobDescription}\n---\n\n请提出修改建议。`;
+
+async function callAI(provider, resumeText, jobDescription, apiKey) {
+  if (provider === 'anthropic') {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 4096, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: USER_MSG(resumeText, jobDescription) }] }),
+    });
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `Anthropic 错误 ${resp.status}`); }
+    return JSON.parse((await resp.json()).content[0].text.trim());
   }
-  const data = await resp.json();
-  const raw = data.content[0].text.trim();
-  return JSON.parse(raw);
+
+  if (provider === 'deepseek') {
+    const resp = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 4096, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: USER_MSG(resumeText, jobDescription) }] }),
+    });
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `DeepSeek 错误 ${resp.status}`); }
+    return JSON.parse((await resp.json()).choices[0].message.content.trim());
+  }
+
+  if (provider === 'openai') {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'gpt-4o', max_tokens: 4096, messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: USER_MSG(resumeText, jobDescription) }] }),
+    });
+    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error?.message || `OpenAI 错误 ${resp.status}`); }
+    return JSON.parse((await resp.json()).choices[0].message.content.trim());
+  }
+
+  throw new Error('不支持的 AI 提供商');
 }
 
 export function useResume() {
@@ -73,6 +86,7 @@ export function useResume() {
   const [resumeData, setResumeData] = useState({ personal_info: {}, summary: '', experiences: [], education: [], skills: [] });
   const [jobDescription, setJobDescription] = useState('');
   const [apiKey, setApiKey] = useState(getStoredKey);
+  const [provider, setProvider] = useState(getStoredProvider);
   const [suggestions, setSuggestions] = useState(null);
   const [mergedData, setMergedData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -80,64 +94,42 @@ export function useResume() {
   const [uploading, setUploading] = useState(false);
 
   const saveApiKey = useCallback((key) => { setApiKey(key); setStoredKey(key); }, []);
+  const saveProvider = useCallback((pid) => { setProvider(pid); setStoredProvider(pid); }, []);
 
   const uploadResume = useCallback(async (file) => {
-    setUploading(true);
-    setError('');
+    setUploading(true); setError('');
     try {
-      const buffer = await file.arrayBuffer();
+      const buf = await file.arrayBuffer();
       let text = '';
       const ext = file.name.split('.').pop().toLowerCase();
-
-      if (ext === 'docx') {
-        const mammoth = await import('mammoth');
-        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-        text = result.value;
-      } else if (ext === 'pdf') {
-        const pdfjsLib = await import('pdfjs-dist');
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
-        const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+      if (ext === 'docx') { text = (await (await import('mammoth')).extractRawText({ arrayBuffer: buf })).value; }
+      else if (ext === 'pdf') {
+        const lib = await import('pdfjs-dist');
+        lib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs';
+        const pdf = await lib.getDocument({ data: buf }).promise;
         const pages = [];
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const content = await page.getTextContent();
-          pages.push(content.items.map(it => it.str).join(' '));
-        }
+        for (let i = 1; i <= pdf.numPages; i++) { const c = await (await pdf.getPage(i)).getTextContent(); pages.push(c.items.map(it => it.str).join(' ')); }
         text = pages.join('\n\n');
-      } else {
-        throw new Error(`不支持的文件格式 .${ext}，请上传 .docx 或 .pdf`);
-      }
-
-      if (!text.trim()) throw new Error('未能从文件中提取到文本内容');
-      setResumeFile(file);
-      setResumeText(text);
+      } else throw new Error(`不支持 .${ext}，请上传 .docx 或 .pdf`);
+      if (!text.trim()) throw new Error('未能从文件中提取到文本');
+      setResumeFile(file); setResumeText(text);
       setResumeData({ personal_info: {}, summary: text, experiences: [], education: [], skills: [] });
-      setSuggestions(null);
-      setMergedData(null);
+      setSuggestions(null); setMergedData(null);
       return { text };
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    } finally {
-      setUploading(false);
-    }
+    } catch (e) { setError(e.message); throw e; }
+    finally { setUploading(false); }
   }, []);
 
   const tailorResume = useCallback(async () => {
     if (!resumeText || !jobDescription || !apiKey) return;
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
-      saveApiKey(apiKey);
-      const suggestions = await callClaude(resumeText, jobDescription, apiKey);
-      setSuggestions(suggestions);
-      setMergedData(merge(resumeData, suggestions));
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [resumeText, jobDescription, apiKey, resumeData, saveApiKey]);
+      saveApiKey(apiKey); saveProvider(provider);
+      const s = await callAI(provider, resumeText, jobDescription, apiKey);
+      setSuggestions(s); setMergedData(merge(resumeData, s));
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
+  }, [resumeText, jobDescription, apiKey, provider, resumeData, saveApiKey, saveProvider]);
 
   const acceptSuggestion = useCallback(() => {
     if (mergedData) { setResumeData(mergedData); setSuggestions(null); setMergedData(null); }
@@ -154,70 +146,33 @@ export function useResume() {
   const exportResume = useCallback(async (format) => {
     const data = mergedData || resumeData;
     try {
-      const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } = await import('docx');
-      const children = [];
-
-      // Personal info header
-      const personal = data.personal_info || {};
-      const name = personal.name || '姓名';
-      children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: name, bold: true, size: 44, color: '1E3A5F', font: 'Calibri' })] }));
-
-      const contacts = [personal.email, personal.phone, personal.location].filter(Boolean);
-      if (contacts.length) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: contacts.join('  |  '), size: 20, color: '64748B', font: 'Calibri' })] }));
-
-      function sectionHeading(text) {
-        children.push(new Paragraph({ spacing: { before: 240, after: 80 }, border: { bottom: { color: 'CBD5E1', space: 1, style: BorderStyle.SINGLE, size: 4 } }, children: [new TextRun({ text, bold: true, size: 26, color: '1E3A5F', font: 'Calibri' })] }));
-      }
-
-      // Summary
-      const summary = data.summary || '';
-      if (summary) { sectionHeading('职业概要'); children.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: summary, size: 22, font: 'Calibri' })] })); }
-
-      // Experiences
-      const experiences = data.experiences || [];
-      if (experiences.length) {
-        sectionHeading('工作经历');
-        for (const exp of experiences) {
-          children.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${exp.company || ''} — ${exp.title || ''}`, bold: true, size: 22, font: 'Calibri' }), new TextRun({ text: `    ${exp.dates || ''}`, size: 20, color: '64748B', font: 'Calibri' })] }));
-          const highlights = Array.isArray(exp.highlights) ? exp.highlights : [];
-          for (const h of highlights) children.push(new Paragraph({ spacing: { after: 20 }, indent: { left: 360 }, bullet: { level: 0 }, children: [new TextRun({ text: h, size: 20, font: 'Calibri' })] }));
-        }
-      }
-
-      // Education
-      const education = data.education || [];
-      if (education.length) {
-        sectionHeading('教育背景');
-        for (const edu of education) children.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${edu.school || ''} — ${edu.degree || ''} ${edu.major || ''}`, bold: true, size: 22, font: 'Calibri' }), new TextRun({ text: `    ${edu.dates || ''}`, size: 20, color: '64748B', font: 'Calibri' })] }));
-      }
-
-      // Skills
-      const skills = data.skills || [];
-      if (skills.length) { sectionHeading('专业技能'); children.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: (Array.isArray(skills) ? skills : [skills]).join('、'), size: 22, font: 'Calibri' })] })); }
-
-      const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1134, bottom: 1134, left: 1418, right: 1418 } } }, children }] });
-
-      if (format === 'docx') {
-        const blob = await Packer.toBlob(doc);
-        downloadBlob(blob, 'tailored_resume.docx');
-      } else if (format === 'pdf') {
-        const blob = await Packer.toBlob(doc);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'tailored_resume.docx';
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (e) {
-      throw new Error('导出失败: ' + e.message);
-    }
+      const { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle } = await import('docx');
+      const ch = [];
+      const p = data.personal_info || {};
+      const name = p.name || '姓名';
+      ch.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 40 }, children: [new TextRun({ text: name, bold: true, size: 44, color: '1E3A5F', font: 'Calibri' })] }));
+      const ct = [p.email, p.phone, p.location].filter(Boolean);
+      if (ct.length) ch.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: ct.join('  |  '), size: 20, color: '64748B', font: 'Calibri' })] }));
+      const sh = (t) => ch.push(new Paragraph({ spacing: { before: 240, after: 80 }, border: { bottom: { color: 'CBD5E1', space: 1, style: BorderStyle.SINGLE, size: 4 } }, children: [new TextRun({ text: t, bold: true, size: 26, color: '1E3A5F', font: 'Calibri' })] }));
+      const s = data.summary || '';
+      if (s) { sh('职业概要'); ch.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: s, size: 22, font: 'Calibri' })] })); }
+      const exps = data.experiences || [];
+      if (exps.length) { sh('工作经历'); for (const e of exps) { ch.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${e.company || ''} — ${e.title || ''}`, bold: true, size: 22, font: 'Calibri' }), new TextRun({ text: `    ${e.dates || ''}`, size: 20, color: '64748B', font: 'Calibri' })] })); for (const h of (Array.isArray(e.highlights) ? e.highlights : [])) ch.push(new Paragraph({ spacing: { after: 20 }, indent: { left: 360 }, bullet: { level: 0 }, children: [new TextRun({ text: h, size: 20, font: 'Calibri' })] })); } }
+      const edu = data.education || [];
+      if (edu.length) { sh('教育背景'); for (const e of edu) ch.push(new Paragraph({ spacing: { after: 40 }, children: [new TextRun({ text: `${e.school || ''} — ${e.degree || ''} ${e.major || ''}`, bold: true, size: 22, font: 'Calibri' }), new TextRun({ text: `    ${e.dates || ''}`, size: 20, color: '64748B', font: 'Calibri' })] })); }
+      const sk = data.skills || [];
+      if (sk.length) { sh('专业技能'); ch.push(new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: (Array.isArray(sk) ? sk : [sk]).join('、'), size: 22, font: 'Calibri' })] })); }
+      const doc = new Document({ sections: [{ properties: { page: { margin: { top: 1134, bottom: 1134, left: 1418, right: 1418 } } }, children: ch }] });
+      const blob = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'tailored_resume.docx'; a.click(); URL.revokeObjectURL(url);
+    } catch (e) { throw new Error('导出失败: ' + e.message); }
   }, [resumeData, mergedData]);
 
   return {
-    resumeFile, resumeText, resumeData, jobDescription, apiKey,
+    resumeFile, resumeText, resumeData, jobDescription, apiKey, provider,
     suggestions, mergedData, loading, error, uploading,
-    setJobDescription, saveApiKey, uploadResume, tailorResume,
+    setJobDescription, saveApiKey, saveProvider, uploadResume, tailorResume,
     acceptSuggestion, rejectSuggestion, reset, exportResume,
   };
 }
@@ -230,13 +185,4 @@ function merge(original, suggestions) {
     education: original.education || [],
     skills: suggestions.skills || original.skills || [],
   };
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }

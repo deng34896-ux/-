@@ -9,9 +9,9 @@ import './App.css';
 
 function App() {
   const {
-    resumeFile, resumeText, resumeData, jobDescription, apiKey,
+    resumeFile, resumeText, resumeData, jobDescription, apiKey, provider,
     suggestions, mergedData, loading, error, uploading,
-    setJobDescription, saveApiKey, uploadResume, tailorResume,
+    setJobDescription, saveApiKey, saveProvider, uploadResume, tailorResume,
     acceptSuggestion, rejectSuggestion, reset, exportResume,
   } = useResume();
 
@@ -111,8 +111,8 @@ function App() {
               <div className="feature-icon">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
               </div>
-              <h3>支持多种岗位</h3>
-              <p>无论是技术、产品、运营、市场还是金融岗位，AI 都能根据行业特点给出针对性的简历优化建议。</p>
+              <h3>支持多种 AI</h3>
+              <p>支持 DeepSeek、OpenAI (GPT)、Anthropic (Claude) 等多种 AI 模型，自由选择你喜欢的 API Key 进行简历优化。</p>
             </div>
           </div>
         </div>
@@ -138,7 +138,7 @@ function App() {
               <div className="step-number">02</div>
               <div className="step-content">
                 <h3>AI 分析并生成优化建议</h3>
-                <p>Claude AI 分析你的简历与岗位要求的匹配度，重写职业概要、优化经历描述、调整技能排序，并附上每项修改的说明。</p>
+                <p>选择你使用的 AI 模型并输入 API Key，AI 分析简历与岗位要求的匹配度，重写职业概要、优化经历描述、调整技能排序。</p>
               </div>
             </div>
             <div className="step-connector">
@@ -148,7 +148,7 @@ function App() {
               <div className="step-number">03</div>
               <div className="step-content">
                 <h3>确认修改 & 导出</h3>
-                <p>在右侧预览优化后的简历，确认满意后一键接受。导出为 Word 或 PDF 格式，直接用于投递。</p>
+                <p>在右侧预览优化后的简历，确认满意后一键接受。导出为 Word 格式，直接用于投递。</p>
               </div>
             </div>
           </div>
@@ -162,9 +162,9 @@ function App() {
           <h2 className="section-heading">立即定制你的简历</h2>
           {!showTool ? (
             <div className="tool-gate">
-              <p>输入你的 API Key 即可开始，Key 仅存储在本地浏览器中。</p>
+              <p>选择 AI 模型并输入 API Key 即可开始，Key 仅存储在本地浏览器中。</p>
               <div className="tool-gate-key">
-                <ApiKeyInput value={apiKey} onChange={saveApiKey} />
+                <ApiKeyInput value={apiKey} onChange={saveApiKey} provider={provider} onProviderChange={saveProvider} />
               </div>
               <button className="tool-gate-btn" disabled={!apiKey.trim()} onClick={() => setShowTool(true)}>
                 进入工作台
@@ -178,7 +178,7 @@ function App() {
                   <>
                     <JobInput value={jobDescription} onChange={setJobDescription} disabled={loading} />
                     <div className="tool-key-inline">
-                      <ApiKeyInput value={apiKey} onChange={saveApiKey} />
+                      <ApiKeyInput value={apiKey} onChange={saveApiKey} provider={provider} onProviderChange={saveProvider} />
                     </div>
                     {error && (
                       <div className="error-msg">
@@ -224,19 +224,19 @@ function App() {
           <div className="faq-grid">
             <div className="faq-item">
               <h3>需要自己提供 API Key 吗？</h3>
-              <p>是的，需要你提供自己的 Anthropic API Key。Key 仅在浏览器本地存储和使用，不会上传到任何第三方服务器。你可以在 Anthropic Console 中免费申请。</p>
+              <p>是的，需要你提供自己的 API Key（DeepSeek、OpenAI 或 Anthropic）。Key 仅在浏览器本地存储和使用，不会上传到任何第三方服务器。</p>
             </div>
             <div className="faq-item">
               <h3>AI 会编造不存在的经历吗？</h3>
-              <p>不会。我们的 AI 被明确要求只基于你已有的真实经历进行重写和强调，绝不编造任何工作经历、项目或技能。</p>
+              <p>不会。AI 被明确要求只基于你已有的真实经历进行重写和强调，绝不编造任何工作经历、项目或技能。</p>
             </div>
             <div className="faq-item">
               <h3>支持哪些文件格式？</h3>
-              <p>上传支持 .docx（Word）和 .pdf 格式。导出同样支持这两种格式，方便你直接用于求职投递。</p>
+              <p>上传支持 .docx（Word）和 .pdf 格式。优化完成后可导出为 Word 文件，方便你直接用于求职投递。</p>
             </div>
             <div className="faq-item">
-              <h3>适合哪些岗位类型？</h3>
-              <p>从技术开发到市场营销，从产品管理到金融分析——ResumeTailor 适用于几乎所有行业的岗位。AI 会根据 JD 中的行业特征给出针对性建议。</p>
+              <h3>支持哪些 AI 模型？</h3>
+              <p>目前支持 DeepSeek、OpenAI (GPT-4o) 和 Anthropic (Claude Sonnet 4) 三种主流 AI 模型。选择你有的 API Key 即可使用。</p>
             </div>
           </div>
         </div>
@@ -255,7 +255,7 @@ function App() {
             <a href="#tool">开始使用</a>
           </div>
           <div className="footer-copy">
-            <p>&copy; 2026 ResumeTailor. 基于 Claude API 构建。</p>
+            <p>&copy; 2026 ResumeTailor. 支持 DeepSeek / OpenAI / Anthropic。</p>
           </div>
         </div>
       </footer>
