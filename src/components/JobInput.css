@@ -1,0 +1,19 @@
+.job-input { margin-top: 20px; }
+.job-label-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+.job-label { font-family: var(--font-display); font-size: 15px; font-weight: 600; color: var(--color-accent); }
+.job-hint { font-size: 12px; color: var(--color-text-secondary); }
+.job-textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-text);
+  resize: vertical;
+  transition: border-color var(--transition);
+}
+.job-textarea:focus { border-color: var(--color-accent); box-shadow: 0 0 0 3px rgb(45 74 62 / 0.08); }
+.job-textarea::placeholder { color: #b0b0b0; }
+.job-textarea:disabled { opacity: 0.6; background: var(--color-bg); }
