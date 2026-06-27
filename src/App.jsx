@@ -12,7 +12,7 @@ function App() {
     resumeFile, resumeText, resumeData, jobDescription, apiKey, provider,
     suggestions, mergedData, loading, error, uploading, parsing,
     setJobDescription, saveApiKey, saveProvider, uploadResume, tailorResume,
-    acceptSuggestion, rejectSuggestion, reset, exportResume,
+    updateResumeData, updateMergedData, acceptSuggestion, rejectSuggestion, reset, exportResume,
   } = useResume();
 
   const [showTool, setShowTool] = useState(false);
@@ -195,7 +195,7 @@ function App() {
               </aside>
               <section className="app-preview">
                 {hasResume ? (
-                  <ResumePreview data={displayData} isMerged={!!mergedData} onExport={exportResume} />
+                  <ResumePreview data={displayData} isMerged={!!mergedData} onExport={exportResume} onUpdate={updateResumeData} onUpdateMerged={updateMergedData} />
                 ) : (
                   <div className="preview-empty">
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.3">
