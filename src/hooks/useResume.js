@@ -275,7 +275,7 @@ export function useResume() {
       });
       const blob = await Packer.toBlob(doc);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'optimized_resume.docx'; a.click(); URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = 'tailored_resume.docx'; a.click(); URL.revokeObjectURL(url);
     } catch (e) { throw new Error('导出失败: ' + e.message); }
   }, [resumeData, mergedData]);
 

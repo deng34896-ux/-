@@ -62,7 +62,7 @@ export default function ResumePreview({ data, isMerged, onExport, onUpdate, onUp
       <div className="preview-toolbar">
         <h3 className="preview-title">{isMerged ? 'AI 优化预览（接受后可在左侧编辑）' : '简历预览（点击文字可编辑）'}</h3>
         <div className="preview-actions">
-          <button className="btn-preview" onClick={() => onExport()}>⬇ 导出 DOCX</button>
+          <button className="btn-preview" onClick={() => onExport("docx")}>⬇ 导出 DOCX</button>
         </div>
       </div>
 
