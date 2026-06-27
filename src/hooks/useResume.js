@@ -150,9 +150,9 @@ export function useResume() {
       setUploading(false);
       return null;
     } finally {
-      if (uploading) setUploading(false);
+      setUploading(false);
     }
-  }, [apiKey, provider, uploading]);
+  }, [apiKey, provider]);
 
   const updateResumeData = useCallback((updater) => {
     setResumeData(prev => typeof updater === 'function' ? updater(prev) : updater);
